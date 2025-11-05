@@ -15,7 +15,7 @@
       outline:1px solid rgba(255,255,255,.06);overflow:hidden;width:100%;aspect-ratio:16/9;
       display:grid;place-items:center;}
     canvas{width:100%;height:100%;display:block;}
-    .hud{position:absolute;top:8px;left:12px;z-index:5;font-weight:700;
+    .hud{position:absolute;top:8px;left:12px;z-index:50;font-weight:700;
       display:grid;gap:4px;font-size:clamp(12px,1.6vw,16px);text-shadow:0 2px 6px rgba(0,0,0,.6);}
     .hud .muted{color:var(--subtext);font-weight:600;}
     .enemy-hud{position:absolute;top:8px;right:12px;z-index:5;display:none;
@@ -29,48 +29,42 @@
     .center-banner .btn:hover{background:#151c23;}
     .help{text-align:center;color:var(--subtext);font-size:13px;margin-top:8px;}
 
-    /* ✅ Enemy portrait bar */
+    /* Portrait bar behind HUD */
     .enemy-progress {
       position: absolute;
-      top: 6px;
+      top: 46px;
       left: 50%;
       transform: translateX(-50%);
       display: flex;
       gap: 6px;
-      z-index: 20;
+      z-index: 4;
       padding: 2px 6px;
       border-radius: 10px;
       background: rgba(0,0,0,0.18);
       outline: 1px solid rgba(255,255,255,0.07);
       backdrop-filter: blur(2px);
+      pointer-events: none;
     }
-    /* ✅ Bigger, brighter, clearly visible enemy portraits */
-.enemy-progress img {
-  width: clamp(45px, 6vw, 70px); /* <-- increased size */
-  height: clamp(45px, 6vw, 70px);
-  object-fit: contain;
-  opacity: 0.95;                /* <-- almost solid */
-  filter: drop-shadow(0 0 8px rgba(0,0,0,1)); /* stronger outline */
-  border-radius: 10px;
-  transition: opacity .2s ease, transform .2s ease;
-}
+    .enemy-progress img {
+      width: clamp(45px, 6vw, 70px);
+      height: clamp(45px, 6vw, 70px);
+      object-fit: contain;
+      opacity: 0.95;
+      filter: drop-shadow(0 0 8px rgba(0,0,0,1));
+      border-radius: 10px;
+      transition: opacity .2s ease, transform .2s ease;
+    }
+    .enemy-progress img.active { opacity:1; transform:scale(1.14);
+      outline:3px solid rgba(255,255,255,0.55); box-shadow:0 0 12px rgba(255,255,255,0.4);}
+    .enemy-progress img.defeated { opacity:.25; filter:grayscale(100%) blur(1px) drop-shadow(0 0 3px rgba(0,0,0,.7)); }
 
-/* ✅ Active guard stands out */
-.enemy-progress img.active {
-  opacity: 1;
-  transform: scale(1.14);
-  outline: 3px solid rgba(255,255,255,0.55);
-  box-shadow: 0 0 12px rgba(255,255,255,0.4);
-}
-
-/* ✅ Defeated guard becomes grayscale + dim */
-.enemy-progress img.defeated {
-  opacity: 0.25;
-  filter: grayscale(100%) blur(1px) drop-shadow(0 0 3px rgba(0,0,0,0.7));
-  transform: none;
-  outline: none;
-}
-
+    /* MOBILE: taller area + smaller portraits */
+    @media (max-width: 768px) {
+      .game-frame { aspect-ratio:auto !important; height:75vh !important; }
+      canvas { height:100% !important; }
+      .enemy-progress { top:56px !important; }
+      .enemy-progress img { width:clamp(28px, 8vw, 48px) !important; height:clamp(28px, 8vw, 48px) !important; }
+    }
   </style>
 </head>
 <body>
@@ -80,7 +74,6 @@
     <div class="game-frame" id="gameFrame">
       <canvas id="game"></canvas>
 
-      <!-- ✅ Portrait bar -->
       <div class="enemy-progress" id="enemyProgress">
         <img id="ep1" alt="g1" />
         <img id="ep2" alt="g2" />
@@ -115,7 +108,7 @@
       </div>
     </div>
 
-    <div class="help">During Boss Fight all you can do is tap to Shoot, jump during fight will be available soon!! <3</div>
+    <div class="help">During fights: both auto-jump every 2s (staggered). Tap to shoot.</div>
   </div>
 
 <script>
@@ -140,7 +133,7 @@ const victoryImg       = document.getElementById('victoryImg');
 const restartBtn       = document.getElementById('restartBtn');
 const playAgainBtn     = document.getElementById('playAgainBtn');
 
-// ✅ Portrait DOM refs
+// Portrait refs
 const ep = [
   document.getElementById('ep1'),
   document.getElementById('ep2'),
@@ -149,6 +142,9 @@ const ep = [
   document.getElementById('epBoss'),
 ];
 
+// Helpers
+function isMobile(){ return window.innerWidth < 768; }
+
 // ---------- State ----------
 const State = Object.freeze({
   RUNNER:'RUNNER', GUARD_INTRO:'GUARD_INTRO', GUARD_FIGHT:'GUARD_FIGHT',
@@ -156,11 +152,11 @@ const State = Object.freeze({
   COLLISION:'COLLISION', GAME_OVER:'GAME_OVER', VICTORY:'VICTORY'
 });
 
-// Use your custom thresholds / healths
+// Thresholds / healths
 const GUARD_THRESHOLDS = [10, 25, 50, 80];
 const GUARD_HEALTHS    = [100, 135, 170, 200];
 const BOSS_HEALTH      = 300;
-const BOSS_SCORE       = 100; // change if you want boss earlier/later
+const BOSS_SCORE       = 100;
 
 // ---------- Assets ----------
 const images = {};
@@ -169,9 +165,9 @@ loadImg('player','img.jpg');
 for (let i=1;i<=10;i++) loadImg('h'+i,  `h${i}.jpg`);
 for (let i=1;i<=10;i++) loadImg('he'+i, `he${i}.jpg`);
 for (let i=1;i<=4;i++)  loadImg('g'+i,  `g${i}.jpg`);
-for (let i=1;i<=4;i++)  loadImg('dg'+i, `dg${i}.jpg`); // ✅ defeated portraits
+for (let i=1;i<=4;i++)  loadImg('dg'+i, `dg${i}.jpg`);
 loadImg('boss','boss.jpg');
-loadImg('dboss','dboss.jpg'); // ✅ defeated boss portrait
+loadImg('dboss','dboss.jpg');
 loadImg('bgr', 'bgr.jpg');
 loadImg('gameover','img2.jpg');
 loadImg('victory', 'img3.jpg');
@@ -217,12 +213,23 @@ const player = {
 
 function groundY(){ return canvas.height/(window.devicePixelRatio||1) - 40; }
 
+// ============ SIZE & PHYSICS (BIGGER SPRITES) ============
 function resetPlayerSize(){
-  const baseH = Math.max(64, Math.floor(canvas.height/6));
-  player.h = baseH;
-  player.w = Math.floor(baseH * 0.8);
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const vw  = canvas.width / dpr;
+  const vh  = canvas.height / dpr;
+
+  // Bigger player: Desktop ≈ 20% height, Mobile ≈ 14% height
+  const baseH = Math.floor(vh * (isMobile() ? 0.14 : 0.20));
+
+  player.h = Math.max(56, baseH);
+  player.w = Math.floor(player.h * 0.85);
   player.y = groundY() - player.h;
-  player.x = Math.max(50, Math.floor(canvas.width/(window.devicePixelRatio||1) * 0.07));
+  player.x = Math.max(30, Math.floor(vw * 0.06));
+
+  // Stronger jump to clear taller hurdles
+  player.jumpV   = isMobile() ? -740 : -980;
+  player.gravity = isMobile() ? 1550 : 1650;
 }
 
 function resizeCanvas(){
@@ -238,11 +245,19 @@ window.addEventListener('resize', resizeCanvas);
 
 const obstacles = [];
 let lastHurdleType = null, repeatCount = 0;
-function hurdleHeightForLevel(){ return player.h * (1 + Math.random()*0.25); } // 1.0x..1.25x
 
-// ---------- Spawning (with spacing + width cap) ----------
+// ---------- Hurdle sizing (BIGGER) ----------
+function hurdleHeightForLevel(){
+  // Desktop: 90–105% of player height, Mobile: 70–88%
+  const min = isMobile() ? 0.70 : 0.90;
+  const max = isMobile() ? 0.88 : 1.05;
+  const k = min + Math.random() * (max - min);
+  return player.h * k;
+}
+
+// ---------- Spawning (with spacing + wider cap) ----------
 function spawnObstacle(){
-  const minGap = player.w * 5;
+  const minGap = player.w * (isMobile() ? 7.5 : 5.5);
 
   if (obstacles.length > 0){
     const last = obstacles[obstacles.length-1];
@@ -267,8 +282,8 @@ function spawnObstacle(){
   const asp  = (hImg.naturalWidth && hImg.naturalHeight) ? (hImg.naturalWidth/hImg.naturalHeight) : 1;
   let w      = Math.max(24, Math.floor(h*asp));
 
-  // ≤ 0.85 × player width
-  const maxHurdleW = player.w * 0.85;
+  // Wider for readability, still fair
+  const maxHurdleW = player.w * (isMobile() ? 0.70 : 0.95);
   if (w > maxHurdleW) w = maxHurdleW;
 
   const xStart = canvas.width/(window.devicePixelRatio||1) + w + minGap;
@@ -285,6 +300,19 @@ function firePlayerBullet(){
   const speed = 700;
   bullets.player.push({ x:player.x+player.w, y:player.y+player.h*0.45, vx:speed, vy:0, r:6 });
 }
+// aimed shot from player towards enemy (on jump during fights)
+function firePlayerAimedBullet(){
+  if (!enemy.img) return;
+  const speed = 760;
+  const sx = player.x + player.w;
+  const sy = player.y + player.h*0.45;
+  const tx = enemy.x + enemy.w*0.5;
+  const ty = enemy.y + enemy.h*0.5;
+  const dx = tx - sx, dy = ty - sy;
+  const len = Math.max(1, Math.hypot(dx,dy));
+  bullets.player.push({ x:sx, y:sy, vx:(dx/len)*speed, vy:(dy/len)*speed, r:6 });
+}
+
 function fireEnemyBullet(ex,ey){
   const speed = 520;
   const tx = player.x + player.w*0.5;
@@ -294,22 +322,41 @@ function fireEnemyBullet(ex,ey){
   bullets.enemy.push({ x:ex, y:ey, vx:(dx/len)*speed, vy:(dy/len)*speed, r:6 });
 }
 
-const enemy = { x:0, y:0, w:0, h:0, img:null, shootTimer:0, shootInterval:650 };
+// ---------- Enemy (with jump) + player jump timer ----------
+let playerNextJumpTs = Infinity; // ms timestamp
+const enemy = {
+  x:0, y:0, w:0, h:0, img:null,
+  shootTimer:0, shootInterval:650,
+  vy:0, onGround:true, jumpV:-600, gravity:1600,
+  nextJumpTs:0
+};
 
 function setLevelByScore(){
   const s = game.score;
   const level = s<10?1 : s<25?2 : s<50?3 : s<80?4 : 5;
   if (level !== game.level){ game.level = level; elLevel.textContent = level; }
 }
-function runnerSpeed(){ return game.speedBase[Math.min(game.level-1, game.speedBase.length-1)]; }
 
-// ---------- Input ----------
+// Speed scaled (boosted) by screen width so phones feel faster
+function runnerSpeed(){
+  const base = game.speedBase[Math.min(game.level-1, game.speedBase.length-1)];
+  const w = window.innerWidth;
+  let factor = Math.min(w / 1200, 1);   // 0..1
+  if (isMobile()){
+    // boost: 400px → ~0.70, 768px → ~0.84
+    factor = 0.55 + factor * 0.45;
+  }
+  return base * factor;
+}
+
+// Input
 let pressed = false;
 function onPress(){
   unlockAudio();
   if (game.state === State.RUNNER){
     if (player.onGround){ player.vy = player.jumpV; player.onGround = false; }
   } else if (game.state === State.GUARD_FIGHT || game.state === State.BOSS_FIGHT){
+    // manual tap to shoot straight
     firePlayerBullet();
   } else if (game.state === State.COLLISION){
     hideCollisionOverlay();
@@ -324,7 +371,7 @@ canvas.addEventListener('touchstart', e=>{ e.preventDefault(); onPress(); }, {pa
 canvas.addEventListener('mousedown', ()=>{ onPress(); });
 collisionOverlay.addEventListener('click', ()=>{ if (game.state===State.COLLISION){ hideCollisionOverlay(); fullReset(); }});
 
-// ---------- Triggers ----------
+// Triggers
 function checkFightTriggers(){
   for (let i=0;i<GUARD_THRESHOLDS.length;i++){
     if (!game.guardsCleared[i] && game.score >= GUARD_THRESHOLDS[i] && game.state === State.RUNNER){
@@ -337,9 +384,8 @@ function checkFightTriggers(){
 function snapPlayerToGround(){ player.vy=0; player.onGround=true; player.y = groundY()-player.h; }
 function stopAllAudio(){ Object.values(audio).forEach(a=>{ try{ a.pause(); a.currentTime=0; }catch(e){} }); }
 
-// ---------- Portrait helpers ----------
+// Portrait helpers
 function portraitsReset(){
-  // reset images and classes
   for (let i=0;i<4;i++){
     ep[i].src = images['g'+(i+1)].src;
     ep[i].classList.remove('defeated','active');
@@ -347,22 +393,11 @@ function portraitsReset(){
   ep[4].src = images['boss'].src;
   ep[4].classList.remove('defeated','active');
 }
-function setActivePortrait(i){
-  ep.forEach(img => img.classList.remove('active'));
-  if (i>=0 && i<ep.length) ep[i].classList.add('active');
-}
-function markGuardDefeated(index){
-  ep[index].src = images['dg'+(index+1)].src;
-  ep[index].classList.add('defeated');
-  ep[index].classList.remove('active');
-}
-function markBossDefeated(){
-  ep[4].src = images['dboss'].src;
-  ep[4].classList.add('defeated');
-  ep[4].classList.remove('active');
-}
+function setActivePortrait(i){ ep.forEach(img => img.classList.remove('active')); if (i>=0 && i<ep.length) ep[i].classList.add('active'); }
+function markGuardDefeated(index){ ep[index].src = images['dg'+(index+1)].src; ep[index].classList.add('defeated'); ep[index].classList.remove('active'); }
+function markBossDefeated(){ ep[4].src = images['dboss'].src; ep[4].classList.add('defeated'); ep[4].classList.remove('active'); }
 
-// ---------- Guards / Boss ----------
+// Guards / Boss
 function startGuardIntro(index){
   game.state = State.GUARD_INTRO;
   snapPlayerToGround();
@@ -375,33 +410,43 @@ function startGuardIntro(index){
   game.guardIndex = index;
   game.enemyHealth = GUARD_HEALTHS[index]; elEnemyHealth.textContent = game.enemyHealth; enemyHud.style.display='block';
 
-  setActivePortrait(index); // ✅ highlight current guard
+  setActivePortrait(index);
   setTimeout(startGuardFight, 1000);
 }
 function startGuardFight(){
   game.state = State.GUARD_FIGHT;
-  const fireRates = [250, 220, 180, 150];  // ms
+  const fireRates = [250, 220, 180, 150];
   enemy.shootInterval = fireRates[game.guardIndex];
   enemy.shootTimer = performance.now();
   try{ audio.fight.currentTime=0; audio.fight.play(); }catch(e){}
+
+  // Jump schedule (enemy first, then player after 1s)
+  const now = performance.now();
+  const mobile = isMobile();
+  enemy.jumpV   = mobile ? -600 : -720;
+  enemy.gravity = mobile ? 1550 : 1650;
+  enemy.onGround = true; enemy.vy = 0;
+
+  enemy.nextJumpTs = Infinity;
+  playerNextJumpTs = Infinity;
 }
 function endGuardFight(won){
   try{ audio.fight.pause(); }catch(e){}
   enemyHud.style.display='none';
   bullets.player.length=0; bullets.enemy.length=0;
+
   if (won){
     game.guardsCleared[game.guardIndex]=true;
-
-    // ✅ mark portrait defeated
     markGuardDefeated(game.guardIndex);
-
     setLevelByScore();
     game.maxHealth += 20;
     game.health = game.maxHealth;
     game.chances = 3;
     elHealth.textContent = game.health; elChances.textContent = game.chances;
     game.state = State.RUNNER;
-    setActivePortrait(-1); // clear highlight
+    setActivePortrait(-1);
+    // ✅ ensure spawning resumes right away after fight
+    game.nextSpawn = performance.now() + 300;
     audio.runner.play().catch(()=>{});
   } else {
     game.chances -= 1; elChances.textContent = game.chances;
@@ -425,14 +470,23 @@ function startBossIntro(){
   enemy.y = groundY() - enemy.h;
   game.enemyHealth = BOSS_HEALTH; elEnemyHealth.textContent = game.enemyHealth; enemyHud.style.display='block';
 
-  setActivePortrait(4); // ✅ highlight boss
+  setActivePortrait(4);
   setTimeout(startBossFight, 1200);
 }
 function startBossFight(){
   game.state = State.BOSS_FIGHT;
-  enemy.shootInterval = 100; // fast boss
+  enemy.shootInterval = 100;
   enemy.shootTimer = performance.now();
   try{ audio.fight.currentTime=0; audio.fight.play(); }catch(e){}
+
+  const now = performance.now();
+  const mobile = isMobile();
+  enemy.jumpV   = mobile ? -620 : -760;
+  enemy.gravity = mobile ? 1550 : 1650;
+  enemy.onGround = true; enemy.vy = 0;
+
+  enemy.nextJumpTs = Infinity;
+  playerNextJumpTs = Infinity;
 }
 function endBossFight(won){
   try{ audio.fight.pause(); }catch(e){}
@@ -440,17 +494,19 @@ function endBossFight(won){
   bullets.player.length=0; bullets.enemy.length=0;
   if (won){
     game.bossCleared = true;
-    markBossDefeated();          // ✅ mark portrait defeated
-    setActivePortrait(-1);       // clear highlight
+    markBossDefeated();
+    setActivePortrait(-1);
     victory();
   } else {
     game.chances -= 1; elChances.textContent = game.chances;
-    if (game.chances > 0){ game.health = game.maxHealth; elHealth.textContent = game.health; startBossIntro(); }
-    else { gameOver(); }
+    if (game.chances > 0){
+      game.health = game.maxHealth; elHealth.textContent = game.health;
+      startBossIntro();
+    } else { gameOver(); }
   }
 }
 
-// ---------- Screens ----------
+// Screens
 function gameOver(){
   stopAllAudio();
   game.state = State.GAME_OVER;
@@ -479,8 +535,8 @@ function fullReset(){
   game.collisionLock=false;
   enemyHud.style.display='none';
 
-  portraitsReset();            // ✅ reset portrait bar
-  setActivePortrait(-1);       // none highlighted initially
+  portraitsReset();
+  setActivePortrait(-1);
 
   resetPlayerSize(); snapPlayerToGround();
   audio.runner.currentTime=0; audio.runner.play().catch(()=>{});
@@ -490,12 +546,12 @@ function fullReset(){
 restartBtn.addEventListener('click', fullReset);
 playAgainBtn.addEventListener('click', fullReset);
 
-// ---------- Helpers ----------
+// Collisions
 function rectsOverlap(ax,ay,aw,ah,bx,by,bw,bh){
   return ax < bx+bw && ax+aw > bx && ay < by+bh && ay+ah > by;
 }
 
-// ---------- Background (parallax) ----------
+// Background
 const bg = { x1:0, x2:0 };
 function resetBg(){
   const w = canvas.width/(window.devicePixelRatio||1);
@@ -503,11 +559,21 @@ function resetBg(){
 }
 resetBg();
 
+// Physics helpers
+function applyPlayerPhysics(dt){
+  if (!player.onGround){
+    player.vy += player.gravity*dt;
+    player.y  += player.vy*dt;
+    const gy = groundY() - player.h;
+    if (player.y >= gy){ player.y = gy; player.vy=0; player.onGround=true; }
+  }
+}
+
 // ---------- Loop ----------
 function update(dt){
   setLevelByScore();
 
-  // parallax at 40% of runner speed
+  // parallax
   const vw = canvas.width/(window.devicePixelRatio||1);
   const parallaxSpeed = runnerSpeed() * 0.40;
   bg.x1 -= parallaxSpeed * dt;
@@ -518,23 +584,25 @@ function update(dt){
   if (game.state === State.RUNNER){
     if (audioUnlocked && audio.runner.paused) audio.runner.play().catch(()=>{});
 
-    // Stop spawning when one score away from any fight, dynamically
+    // anti-stall: hold spawns only if one-before-fight & an obstacle exists
     const nextScore = game.score + 1;
-    const isPreFight = (GUARD_THRESHOLDS.includes(nextScore) || nextScore === BOSS_SCORE);
-    if (!isPreFight && performance.now() >= game.nextSpawn) spawnObstacle();
+    const isPrefightPoint = (GUARD_THRESHOLDS.includes(nextScore) || nextScore === BOSS_SCORE);
+    const shouldHoldSpawns = isPrefightPoint && obstacles.length > 0;
+    if (!shouldHoldSpawns && performance.now() >= game.nextSpawn) {
+      spawnObstacle();
+    }
 
     const speed = runnerSpeed();
     for (let i=obstacles.length-1; i>=0; i--){
       const o = obstacles[i];
       o.x -= speed*dt;
 
-      // score when it leaves left edge
       if (!o.scored && o.x + o.w <= 0){
         o.scored = true;
         game.score += 1;
         elScore.textContent = game.score;
 
-        // trigger guard/boss immediately in the same frame
+        // trigger guard/boss immediately
         if (game.state === State.RUNNER){
           const s = game.score;
           const gi = GUARD_THRESHOLDS.indexOf(s);
@@ -546,15 +614,10 @@ function update(dt){
       if (o.x + o.w < -40) obstacles.splice(i,1);
     }
 
-    // player physics
-    if (!player.onGround){
-      player.vy += player.gravity*dt;
-      player.y  += player.vy*dt;
-      const gy = groundY() - player.h;
-      if (player.y >= gy){ player.y = gy; player.vy=0; player.onGround=true; }
-    }
+    // Player physics while running
+    applyPlayerPhysics(dt);
 
-    // collisions → overlay + manual dismiss restart
+    // collisions → overlay
     if (!game.collisionLock){
       for (const o of obstacles){
         if (rectsOverlap(player.x,player.y,player.w,player.h, o.x,o.y,o.w,o.h)){
@@ -567,20 +630,59 @@ function update(dt){
       }
     }
 
-    checkFightTriggers(); // safety
+    checkFightTriggers();
   }
 
   if (game.state === State.GUARD_FIGHT || game.state === State.BOSS_FIGHT){
     const now = performance.now();
+
+    // enemy shooting
     if (now - enemy.shootTimer >= enemy.shootInterval){
       enemy.shootTimer = now;
       fireEnemyBullet(enemy.x + enemy.w*0.1, enemy.y + enemy.h*0.4);
     }
 
+    // Scheduled auto-jumps (every 2s), staggered & retry if mid-air
+    if (now >= playerNextJumpTs){
+      if (player.onGround){
+        player.vy = player.jumpV;
+        player.onGround = false;
+        // aimed shot at jump
+        firePlayerAimedBullet();
+        playerNextJumpTs += 2000;
+      } else {
+        playerNextJumpTs = Infinity;
+      }
+    }
+    if (now >= enemy.nextJumpTs){
+      if (enemy.onGround){
+        enemy.vy = enemy.jumpV;
+        enemy.onGround = false;
+        enemy.nextJumpTs = Infinity;
+      } else {
+        enemy.nextJumpTs = Infinity;
+      }
+    }
+
+    // enemy vertical physics
+    if (!enemy.onGround){
+      enemy.vy += enemy.gravity * dt;
+      enemy.y  += enemy.vy * dt;
+      const ey = groundY() - enemy.h;
+      if (enemy.y >= ey){
+        enemy.y = ey;
+        enemy.vy = 0;
+        enemy.onGround = true;
+      }
+    }
+
+    // player physics during fights
+    applyPlayerPhysics(dt);
+
     // player bullets
     for (let i=bullets.player.length-1; i>=0; i--){
       const b = bullets.player[i];
-      b.x += b.vx*dt;
+      b.x += b.vx*dt; b.y += (b.vy||0)*dt;
       if (enemy.img && rectsOverlap(b.x-b.r,b.y-b.r,b.r*2,b.r*2, enemy.x,enemy.y,enemy.w,enemy.h)){
         bullets.player.splice(i,1);
         game.enemyHealth = Math.max(0, game.enemyHealth-1);
@@ -589,7 +691,9 @@ function update(dt){
           if (game.state===State.GUARD_FIGHT) endGuardFight(true);
           else endBossFight(true);
         }
-      } else if (b.x > vw + 100) bullets.player.splice(i,1);
+      } else if (b.x > vw + 120 || b.x < -120 || b.y < -120 || b.y > (canvas.height/(window.devicePixelRatio||1))+120) {
+        bullets.player.splice(i,1);
+      }
     }
 
     // enemy bullets
@@ -663,15 +767,13 @@ function loop(now){
 }
 requestAnimationFrame(loop);
 
-// ---------- Collision Overlay ----------
+// Overlay
 function showCollisionOverlay(hType){
   const img = images['he'+hType] || images['he1'];
   collisionImgEl.src = img ? img.src : '';
   collisionOverlay.style.display = 'flex';
 }
-function hideCollisionOverlay(){
-  collisionOverlay.style.display = 'none';
-}
+function hideCollisionOverlay(){ collisionOverlay.style.display = 'none'; }
 
 // Start!
 fullReset();
